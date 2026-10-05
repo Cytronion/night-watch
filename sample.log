@@ -1,0 +1,10 @@
+Oct  4 09:14:02 lab sshd[2201]: Accepted password for anika from 10.4.1.18 port 51220 ssh2
+Oct  4 09:16:40 lab sshd[2208]: Failed password for anika from 10.4.1.18 port 51244 ssh2
+Oct  4 11:02:11 lab sudo: anika : session opened for user root
+Oct  4 14:22:18 lab sshd[2404]: Failed password for invalid user admin from 172.16.8.40 port 44102 ssh2
+Oct  4 14:22:21 lab sshd[2405]: Failed password for invalid user admin from 172.16.8.40 port 44108 ssh2
+Oct  4 14:22:24 lab sshd[2406]: Failed password for invalid user root from 172.16.8.40 port 44112 ssh2
+Oct  4 18:40:02 lab sshd[2510]: Accepted password for dev from 10.4.1.22 port 51880 ssh2
+Oct  4 23:11:46 lab sshd[2602]: Accepted password for dev from 10.4.1.22 port 52011 ssh2
+Oct  5 02:06:33 lab sshd[2701]: Failed password for anika from 10.8.0.4 port 60021 ssh2
+Oct  5 06:12:09 lab sshd[2804]: Accepted password for lab from 10.4.1.10 port 51102 ssh2

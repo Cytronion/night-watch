@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Night Watch · auth log</title>
+  <style>
+    :root {
+      --bg: #12141a;
+      --panel: #1b1e27;
+      --ink: #e6e1d6;
+      --muted: #8d8796;
+      --line: #2c3140;
+      --amber: #e0a15a;
+      --rose: #d36b6b;
+      --mint: #8fbfa3;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 80% 0%, rgba(224, 161, 90, 0.08), transparent 32%), var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", Candara, sans-serif;
+    }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 28px 18px 48px; }
+    .kicker { letter-spacing: 0.18em; text-transform: uppercase; color: var(--amber); font-size: 11px; }
+    h1 { font-weight: 520; letter-spacing: -0.03em; font-size: 36px; margin: 8px 0; }
+    .lead { color: var(--muted); max-width: 66ch; line-height: 1.5; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 18px 0; }
+    .stat { background: var(--panel); border: 1px solid var(--line); padding: 12px 14px; }
+    .stat b { display: block; font-size: 28px; font-weight: 520; }
+    .stat span { color: var(--muted); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-bottom: 12px; }
+    label { color: var(--muted); font-size: 12px; display: grid; gap: 4px; }
+    input, textarea, button { font: inherit; }
+    input[type="number"] {
+      width: 70px; background: transparent; color: var(--ink); border: 1px solid var(--line); padding: 8px;
+    }
+    textarea {
+      width: 100%; min-height: 160px; background: #151821; color: var(--ink);
+      border: 1px solid var(--line); padding: 12px; resize: vertical;
+    }
+    button { background: var(--amber); color: #1a140c; border: none; padding: 9px 12px; cursor: pointer; }
+    .file { color: var(--muted); font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; color: var(--muted); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; padding: 8px 6px; }
+    td { border-top: 1px solid var(--line); padding: 8px 6px; vertical-align: top; }
+    .fail { color: var(--rose); }
+    .odd { color: var(--amber); }
+    .ok { color: var(--mint); }
+    .mono { font-family: ui-monospace, "Courier New", monospace; font-size: 12px; }
+    @media (max-width: 700px) { .stats { grid-template-columns: 1fr; } h1 { font-size: 30px; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="kicker">Desk log · read only</div>
+    <h1>Night Watch</h1>
+    <p class="lead">Paste an auth log or open a file from your machine. Failed sign-ins, sources with three or more failures, and successes inside the watch window are marked. Nothing is sent anywhere.</p>
+    <div class="stats">
+      <div class="stat"><b id="n-lines">0</b><span>Lines read</span></div>
+      <div class="stat"><b id="n-fail">0</b><span>Failed logins</span></div>
+      <div class="stat"><b id="n-odd">0</b><span>Off-hours successes</span></div>
+    </div>
+    <div class="controls">
+      <label>Window start <input id="start" type="number" min="0" max="23" value="22" /></label>
+      <label>Window end <input id="end" type="number" min="0" max="23" value="6" /></label>
+      <label class="file">Open a log <input id="file" type="file" accept=".log,.txt" /></label>
+      <button id="sample" type="button">Load sample</button>
+    </div>
+    <textarea id="log" spellcheck="false"></textarea>
+    <p class="lead" id="repeats"></p>
+    <table>
+      <thead><tr><th>Line</th><th>Flag</th><th>Entry</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <script>
+    const SAMPLE = `Oct  4 09:14:02 lab sshd[2201]: Accepted password for anika from 10.4.1.18 port 51220 ssh2
+Oct  4 09:16:40 lab sshd[2208]: Failed password for anika from 10.4.1.18 port 51244 ssh2
+Oct  4 11:02:11 lab sudo: anika : session opened for user root
+Oct  4 14:22:18 lab sshd[2404]: Failed password for invalid user admin from 172.16.8.40 port 44102 ssh2
+Oct  4 14:22:21 lab sshd[2405]: Failed password for invalid user admin from 172.16.8.40 port 44108 ssh2
+Oct  4 14:22:24 lab sshd[2406]: Failed password for invalid user root from 172.16.8.40 port 44112 ssh2
+Oct  4 18:40:02 lab sshd[2510]: Accepted password for dev from 10.4.1.22 port 51880 ssh2
+Oct  4 23:11:46 lab sshd[2602]: Accepted password for dev from 10.4.1.22 port 52011 ssh2
+Oct  5 02:06:33 lab sshd[2701]: Failed password for anika from 10.8.0.4 port 60021 ssh2
+Oct  5 06:12:09 lab sshd[2804]: Accepted password for lab from 10.4.1.10 port 51102 ssh2`;
+    const FAIL = /failed password|authentication failure|invalid user|failed login/i;
+    const OK = /accepted password|session opened|successful login/i;
+    const IP = /\b(?:\d{1,3}\.){3}\d{1,3}\b/;
+    const STAMP = /\b(\d{2}):(\d{2}):(\d{2})\b/;
+    function inWindow(hour, start, end) {
+      if (start === end) return false;
+      if (start < end) return hour >= start && hour < end;
+      return hour >= start || hour < end;
+    }
+    function parse(text) {
+      const start = Number(document.getElementById("start").value);
+      const end = Number(document.getElementById("end").value);
+      const counts = {};
+      const rows = text.split(/\n/).map((textLine, index) => {
+        const failed = FAIL.test(textLine);
+        const success = OK.test(textLine) && !failed;
+        const ip = textLine.match(IP);
+        const stamp = textLine.match(STAMP);
+        const hour = stamp ? Number(stamp[1]) : null;
+        const source = ip ? ip[0] : "unknown";
+        if (failed) counts[source] = (counts[source] || 0) + 1;
+        return { line: index + 1, text: textLine, failed, success, source, hour, off: success && hour !== null && inWindow(hour, start, end) };
+      }).filter(row => row.text.trim());
+      rows.forEach(row => row.repeat = row.failed && counts[row.source] >= 3);
+      return rows;
+    }
+    function render() {
+      const rows = parse(document.getElementById("log").value);
+      document.getElementById("n-lines").textContent = rows.length;
+      document.getElementById("n-fail").textContent = rows.filter(row => row.failed).length;
+      document.getElementById("n-odd").textContent = rows.filter(row => row.off).length;
+      const repeats = [...new Set(rows.filter(row => row.repeat).map(row => row.source))];
+      document.getElementById("repeats").textContent = repeats.length
+        ? "Repeated failures from " + repeats.join(", ") + "."
+        : "No source has three or more failures.";
+      document.getElementById("rows").innerHTML = rows.filter(row => row.failed || row.off).map(row => {
+        const flag = row.failed ? (row.repeat ? "Fail · repeat" : "Fail") : "Off hours";
+        const cls = row.failed ? "fail" : "odd";
+        return `<tr><td>${row.line}</td><td class="${cls}">${flag}</td><td class="mono">${row.text}</td></tr>`;
+      }).join("") || `<tr><td colspan="3" class="ok">No failed or off-hours lines in this file.</td></tr>`;
+    }
+    document.getElementById("log").addEventListener("input", render);
+    document.getElementById("start").addEventListener("input", render);
+    document.getElementById("end").addEventListener("input", render);
+    document.getElementById("sample").addEventListener("click", () => {
+      document.getElementById("log").value = SAMPLE;
+      render();
+    });
+    document.getElementById("file").addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      document.getElementById("log").value = await file.text();
+      render();
+    });
+    document.getElementById("log").value = SAMPLE;
+    render();
+  </script>
+</body>
+</html>
